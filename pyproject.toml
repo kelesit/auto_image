@@ -8,4 +8,6 @@ dependencies = [
     "aiohttp>=3.13.0",
     "elasticsearch>=9.1.1",
     "pandas>=2.3.3",
+    "pymysql>=1.1.2",
+    "sqlalchemy>=2.0.43",
 ]
