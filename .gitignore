@@ -9,4 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
+
+.DS_Store
 0033/
+data/
