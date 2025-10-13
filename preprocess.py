@@ -26,7 +26,7 @@ import aiohttp
 import numpy as np
 
 from tools import load_spu_vectors, get_spu_vector, calculate_vector_similarity, find_similar_spus, find_similar_spus_above_threshold
-from gpu_tools import gpu_accelerated_cleaning, gpu_accelerated_sampling, GPUVectorCalculator
+# from gpu_tools import gpu_accelerated_cleaning, gpu_accelerated_sampling, GPUVectorCalculator
 
 # 连接数据库
 def get_db_engine(user, password, host, port, db):
@@ -38,7 +38,7 @@ def get_db_engine(user, password, host, port, db):
 def fetch_spu_data(engine, selected_categories):
     placeholders = ','.join(['%s'] * len(selected_categories))
     query = f"""
-    SELECT SPU, 产品分类, 主图ID
+    SELECT SPU, 产品分类, 主图ID, 最低价格
     FROM stg_bayshop_litfad_spu
     WHERE 产品分类 IN ({placeholders})
     AND 主图ID IS NOT NULL
@@ -520,22 +520,22 @@ def select_diverse_spus(target_total=5000):
 
 if __name__ == "__main__":
     # 第一部分：数据准备
-    # step1_fetch_and_save_spu_data()
-    # step2_fetch_and_save_image_vectors()
-    # step3_filter_spus_by_vector_existence()
+    step1_fetch_and_save_spu_data()
+    step2_fetch_and_save_image_vectors()
+    step3_filter_spus_by_vector_existence()
 
-    # 第二部分：数据清洗和筛选
-    print("开始数据清洗...")
-    cleaned_df = clean_spus()
+    # # 第二部分：数据清洗和筛选
+    # print("开始数据清洗...")
+    # cleaned_df = clean_spus()
     
-    print("\n开始多样化选择...")
-    selected_df = select_diverse_spus(target_total=5000)
-    
-    if selected_df is not None:
-        print(f"\n✅ 完成！已成功选择 {len(selected_df)} 个多样化的SPU")
-        print("输出文件:")
-        print("  - spu_data_cleaned.csv: 清洗后的数据")
-        print("  - spu_data_final_5000.csv: 最终选择的5000个SPU")
+    # print("\n开始多样化选择...")
+    # selected_df = select_diverse_spus(target_total=5000)
+
+    # if selected_df is not None:
+    #     print(f"\n✅ 完成！已成功选择 {len(selected_df)} 个多样化的SPU")
+    #     print("输出文件:")
+    #     print("  - spu_data_cleaned.csv: 清洗后的数据")
+    #     print("  - spu_data_final_5000.csv: 最终选择的5000个SPU")
 
 
 
