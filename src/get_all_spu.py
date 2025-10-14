@@ -1,20 +1,8 @@
 """
-预先准备工作
 一、数据准备
 1. 获取所需品类的spu数据
 2. 通过erp api获取spu对应的图片向量，如果有则存储，没有则标记
 3. 过滤出带有向量的spu数据
-
-二、数据清洗和筛选
-1. 根据品类分层
-2. 每一层中遍历图片向量，筛选掉相似度过高的产品，保留多样性
-
-
-三、根据品类分层，分别进行kmeans聚类，记录下每个品类的N个簇心点，作为该品类的N中类别心产品
-N设定为该品类spu数的10%或至少10个
-
-将所有数据存入elasticsearch，供后续使用
-
 """
 
 from sqlalchemy import create_engine
@@ -23,9 +11,6 @@ import os
 import asyncio
 import aiohttp
 import numpy as np
-
-from tools import load_spu_vectors, get_spu_vector, calculate_vector_similarity, find_similar_spus, find_similar_spus_above_threshold
-# from gpu_tools import gpu_accelerated_cleaning, gpu_accelerated_sampling, GPUVectorCalculator
 
 # 连接数据库
 def get_db_engine(user, password, host, port, db):
@@ -47,7 +32,7 @@ def fetch_spu_data(engine, selected_categories):
     return df
 
 
-def step1_fetch_and_save_spu_data():
+def step1_fetch_and_save_spu_data(output_dir='./data/preprocess', output_file='spu_data.csv', selected_categories=None):
     # 数据库连接参数
     db_params = {
         'user': 'zhenggantian',
@@ -57,21 +42,10 @@ def step1_fetch_and_save_spu_data():
         'db': 'ods'
     }
 
-    # 需要获取的品类
-    selected_categories = [
-        '90 - Coffee Tables',
-        '114 - Benches',
-        '88 - TV Stands & Entertainment Centers',
-        '91 - End & Side Tables',
-        '83 - Sofa',
-        '176 - Room Dividers',
-        '92 - Cabinets & Chests',
-        '82 - Accent Chairs',
-        '218 - Plant Stands & Tables',
-        '105 - Hall Trees & Coat Racks',
-        '104 - Console Tables',
-        '85 - Bookcases'
-    ]
+    if selected_categories is None:
+        raise ValueError("请提供所需的产品分类列表")
+    
+    print(f"目标产品分类: {selected_categories}")
 
     # 创建数据库引擎
     engine = get_db_engine(**db_params)
@@ -80,15 +54,13 @@ def step1_fetch_and_save_spu_data():
     spu_data = fetch_spu_data(engine, selected_categories)
 
     # 保存到本地CSV文件
-    output_dir = './data/preprocess'
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, 'spu_data.csv')
+    output_path = os.path.join(output_dir, output_file)
     spu_data.to_csv(output_path, index=False, encoding='utf-8-sig')
     print(f"SPU数据已保存到 {output_path}")
 
 
-
-# ---------- step 2 ----------
+    # ---------- step 2 ----------
 
 async def get_batch_spu_image_vectors(session, spu_list):
     """
@@ -257,13 +229,18 @@ def save_checkpoint(last_batch, results, checkpoint_file):
             json.dump(results, f)
 
 
-def step2_fetch_and_save_image_vectors(batch_size=50, delay=0.1):
+def step2_fetch_and_save_image_vectors(
+        spu_file_name='spu_data.csv', 
+        output_dir='./data/preprocess',
+        batch_size=50, delay=0.1):
     """
     获取并保存所有SPU的图片向量
     """
-    spu_file_path = './data/preprocess/spu_data.csv'
     
     # 读取SPU数据
+    spu_file_path = os.path.join(output_dir, spu_file_name)
+    if not os.path.exists(spu_file_path):
+        raise FileNotFoundError(f"未找到SPU数据文件: {spu_file_path}")
     spu_df = pd.read_csv(spu_file_path, dtype={'SPU': str})
     spu_list = spu_df['SPU'].tolist()
     
@@ -322,20 +299,19 @@ def step2_fetch_and_save_image_vectors(batch_size=50, delay=0.1):
     final_df = spu_df.merge(results_df, on='SPU', how='left')
     
     # 保存结果
-    output_dir = './data/preprocess'
     os.makedirs(output_dir, exist_ok=True)
     
     # 保存元数据到CSV
     metadata_path = os.path.join(output_dir, 'spu_metadata.csv')
     final_df.to_csv(metadata_path, index=False, encoding='utf-8-sig')
     
-    # 保存向量到NPZ文件（压缩的numpy格式）
-    if vectors:
-        vectors_path = os.path.join(output_dir, 'spu_vectors.npz')
-        np.savez_compressed(vectors_path, **vectors)
-        print(f"向量数据已保存到: {vectors_path}")
+    # # 保存向量到NPZ文件（压缩的numpy格式）
+    # if vectors:
+    #     vectors_path = os.path.join(output_dir, 'spu_vectors.npz')
+    #     np.savez_compressed(vectors_path, **vectors)
+    #     print(f"向量数据已保存到: {vectors_path}")
     
-    # 也可以保存为pickle格式（包含完整信息）
+    # 保存为pickle格式）
     import pickle
     full_data = {
         'metadata': final_df,
@@ -357,12 +333,11 @@ def step2_fetch_and_save_image_vectors(batch_size=50, delay=0.1):
     return final_df, vectors
     
     
-def step3_filter_spus_by_vector_existence():
+def step3_filter_spus_by_vector_existence(data_dir='./data/preprocess', metadata_file_name='spu_metadata.csv', output_file_name='spu_data_with_vectors.csv'):
     """
     过滤出有向量的SPU数据
     """
-    data_dir = './data/preprocess'
-    metadata_path = os.path.join(data_dir, 'spu_metadata.csv')
+    metadata_path = os.path.join(data_dir, metadata_file_name)
     # 读取元数据
     metadata_df = pd.read_csv(metadata_path, dtype={'SPU': str})
     
@@ -372,168 +347,45 @@ def step3_filter_spus_by_vector_existence():
     print(f"总SPU数: {len(metadata_df)}, 有向量的SPU数: {len(filtered_df)}")
     
     # 保存过滤后的数据
-    filtered_path = os.path.join(data_dir, 'spu_data_with_vectors.csv')
+    filtered_path = os.path.join(data_dir, output_file_name)
     filtered_df.to_csv(filtered_path, index=False, encoding='utf-8-sig')
     print(f"有向量的SPU数据已保存到: {filtered_path}")
     
     return filtered_df
 
 
-"""
-第二部分
-数据清洗和筛选
-1. 根据品类分层
-2. 每一层中遍历图片向量，筛选掉相似度过高的产品，保留多样性
-"""
+def get_all_spu_with_categories(data_dir, selected_categories=None):
 
-def clean_spus():
-    # 读取有向量的SPU数据
-    data_dir = './data/preprocess'
-    filtered_path = os.path.join(data_dir, 'spu_data_with_vectors.csv')
-    filtered_df = pd.read_csv(filtered_path, dtype={'SPU': str})
-    all_spu_num = len(filtered_df)
+    step1_fetch_and_save_spu_data(
+        output_dir=data_dir, output_file='spu_data.csv')
     
-    # 加载向量数据
-    _, vectors_dict = load_spu_vectors(data_dir)
-
-    categories = filtered_df['产品分类'].unique()
-    abolished_list = []  # 用列表收集被筛选掉的SPU数据
-    print(f"发现 {len(categories)} 个不同的产品分类")
+    step2_fetch_and_save_image_vectors(
+        spu_file_name='spu_data.csv', 
+        output_dir=data_dir, batch_size=50, delay=0.1)
     
-    for category in categories:
-        category_df = filtered_df[filtered_df['产品分类'] == category]
-        category_spu_num = len(category_df)
-        target_spu_num = max(10, int((category_spu_num / all_spu_num) * 5000))
-        print(f"处理分类 '{category}'，包含 {category_spu_num} 个SPU，目标筛选到 {target_spu_num} 个")
-        print(f" step 1: 清洗相似度过高的SPU")
-        
-        similar_threshold = 0.95
-        abolished_spus = set()  # 使用集合存储已被筛选的SPU，提高查找效率
-        processed_count = 0
-        
-        for spu in category_df['SPU']:
-            processed_count += 1
-            if processed_count % 100 == 0:
-                print(f"   处理进度: {processed_count}/{category_spu_num}, 已清洗: {len(abolished_spus)}")
-                
-            if spu in abolished_spus:
-                continue  # 已经被清洗掉，跳过
-            
-            similar_df = find_similar_spus_above_threshold(spu, vectors_dict, category_df, threshold=similar_threshold)
-            if len(similar_df) > 0:
-                abolished_list.append(similar_df)
-                # 将相似的SPU加入到已筛选集合中
-                abolished_spus.update(similar_df['SPU'].tolist())
-                print(f"   发现 {len(similar_df)} 个与SPU {spu} 相似度>{similar_threshold}的产品")
-
-        
-        print(f" 分类 '{category}' 清洗完成，清洗掉 {len(abolished_spus)} 个相似SPU")
-
-    # 合并所有被筛选掉的SPU数据
-    if abolished_list:
-        abolished_df = pd.concat(abolished_list, ignore_index=True)
-        # 以SPU为唯一键，去重
-        abolished_df = abolished_df.drop_duplicates(subset=['SPU'])
-    else:
-        abolished_df = pd.DataFrame(columns=filtered_df.columns)
+    step3_filter_spus_by_vector_existence(
+        data_dir=data_dir, 
+        metadata_file_name='spu_metadata.csv', 
+        output_file_name='spu_data_with_vectors.csv'
+    )
     
-    cleaned_df = filtered_df[~filtered_df['SPU'].isin(abolished_df['SPU'])].copy()
-    print(f"\n=== 清洗阶段完成 ===")
-    print(f"原始SPU数: {all_spu_num}")
-    print(f"清洗后剩余SPU数: {len(cleaned_df)}")
-    print(f"清洗掉的SPU数: {len(abolished_df) if len(abolished_df) > 0 else 0}")
-    
-    # 保存清洗后的数据
-    cleaned_df.to_csv(os.path.join(data_dir, 'spu_data_cleaned.csv'), index=False, encoding='utf-8-sig')
-    
-    return cleaned_df
-
-
-def select_diverse_spus(target_total=5000):
-    """
-    从清洗后的数据中选择5000个多样化的SPU
-    按品类比例分配，并使用多样化采样算法
-    """
-    from tools import sample_diverse_spus
-    
-    data_dir = './data/preprocess'
-    cleaned_path = os.path.join(data_dir, 'spu_data_cleaned.csv')
-    
-    if not os.path.exists(cleaned_path):
-        print("未找到清洗后的数据文件，请先运行clean_spus()")
-        return None
-    
-    cleaned_df = pd.read_csv(cleaned_path, dtype={'SPU': str})
-    _, vectors_dict = load_spu_vectors(data_dir)
-    
-    print(f"\n=== 多样化选择阶段 ===")
-    print(f"从 {len(cleaned_df)} 个清洗后的SPU中选择 {target_total} 个")
-    
-    categories = cleaned_df['产品分类'].unique()
-    selected_list = []
-    
-    for category in categories:
-        category_df = cleaned_df[cleaned_df['产品分类'] == category]
-        category_count = len(category_df)
-        
-        # 按比例分配目标数量，但至少保证每个类别有10个
-        target_count = max(10, int((category_count / len(cleaned_df)) * target_total))
-        
-        # 如果某个类别的SPU数量不足目标数量，就全部选择
-        actual_target = min(target_count, category_count)
-        
-        print(f"分类 '{category}': {category_count} -> {actual_target} 个SPU")
-        
-        # 使用多样化采样
-        selected_category_df = sample_diverse_spus(
-            category_df, vectors_dict, actual_target, method='farthest_first'
-        )
-        
-        selected_list.append(selected_category_df)
-    
-    # 合并所有选中的SPU
-    selected_df = pd.concat(selected_list, ignore_index=True)
-    
-    # 如果总数超过目标，进行最终筛选
-    if len(selected_df) > target_total:
-        print(f"当前选中 {len(selected_df)} 个，需要进一步筛选到 {target_total} 个")
-        selected_df = sample_diverse_spus(
-            selected_df, vectors_dict, target_total, method='farthest_first'
-        )
-    
-    print(f"\n=== 最终选择结果 ===")
-    print(f"最终选中SPU数: {len(selected_df)}")
-    
-    # 按类别统计
-    category_stats = selected_df['产品分类'].value_counts()
-    for category, count in category_stats.items():
-        print(f"  {category}: {count} 个")
-    
-    # 保存最终结果
-    final_path = os.path.join(data_dir, 'spu_data_final_5000.csv')
-    selected_df.to_csv(final_path, index=False, encoding='utf-8-sig')
-    print(f"最终结果已保存到: {final_path}")
-    
-    return selected_df
 
 if __name__ == "__main__":
     # 第一部分：数据准备
-    step1_fetch_and_save_spu_data()
-    step2_fetch_and_save_image_vectors()
-    step3_filter_spus_by_vector_existence()
-
-    # 第二部分：数据清洗和筛选
-    print("开始数据清洗...")
-    cleaned_df = clean_spus()
-    
-    # print("\n开始多样化选择...")
-    # selected_df = select_diverse_spus(target_total=5000)
-
-    # if selected_df is not None:
-    #     print(f"\n✅ 完成！已成功选择 {len(selected_df)} 个多样化的SPU")
-    #     print("输出文件:")
-    #     print("  - spu_data_cleaned.csv: 清洗后的数据")
-    #     print("  - spu_data_final_5000.csv: 最终选择的5000个SPU")
-
-
-
+    data_dir = './data/preprocess'
+    os.makedirs(data_dir, exist_ok=True)
+    selected_categories = [
+        '90 - Coffee Tables',
+        '114 - Benches',
+        '88 - TV Stands & Entertainment Centers',
+        '91 - End & Side Tables',
+        '83 - Sofa',
+        '176 - Room Dividers',
+        '92 - Cabinets & Chests',
+        '82 - Accent Chairs',
+        '218 - Plant Stands & Tables',
+        '105 - Hall Trees & Coat Racks',
+        '104 - Console Tables',
+        '85 - Bookcases'
+    ]
+    get_all_spu_with_categories(data_dir=data_dir, selected_categories=selected_categories)

@@ -35,12 +35,11 @@
 92 - Cabinets & Chests
 82 - Accent Chairs
 218 - Plant Stands & Tables
-105 - Hall Trees & Coat Racks
-104 - Console Tables
-85 - Bookcases
 这几种品类
 
-最终我需要挑选出7000个spu进行换图处理
+最终需要挑选出7000个spu进行换图处理
+
+
 
 ### 挑选方案
 一、通过埋没因子+整体销量共同决定各个品类的挑选数量N
@@ -63,7 +62,6 @@
 
        
        
-
 ### 分析思路：
 用现有数据估算各品类中"被埋没但有潜力"的SPU数量
 1. 计算各品类的理想动销率a和埋没因子b
