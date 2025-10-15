@@ -101,20 +101,20 @@ ps: b越小，埋没程度越高
 ### A图集构建方案
 
 每个spu关联一个主图，n个场景图，m个sku图
-
 需要以结构化存储的方式保存这些图片，保存图片路径
 
+每个品类的所有spu的图片信息存储在一个JSON文件中，方便后续处理
 {
     "spu_id": 123456,
-    "main_image": "path/to/main_image.jpg",
+    "main_image": "image_id_1",
     "scene_images": [
-        "path/to/scene_image1.jpg",
-        "path/to/scene_image2.jpg",
+        "image_id_2",
+        "image_id_3",
         ...
     ],
     "sku_images": [
-        "path/to/sku_image1.jpg",
-        "path/to/sku_image2.jpg",
+        "image_id_4",
+        "image_id_5",
         ...
     ]
 }
@@ -136,4 +136,4 @@ A_image_dataset/
     │   ├── image_id_5.jpg
     │   └── ...
     └── ...
-每个spu的图片信息存储在一个JSON文件中，方便后续处理
+
