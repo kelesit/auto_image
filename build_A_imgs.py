@@ -271,15 +271,12 @@ def download_all_images(metadata_dir: Path, base_image_dir: Path):
 
 
 if __name__ == "__main__":
-    # spu_id = 21772288
-    # # main_and_scene_images_ids_dict = get_main_and_scene_images_ids(spu_id)
-    # # print(main_and_scene_images_ids_dict)
-    # sku_images_ids_dict = get_sku_images_ids(spu_id)
-    # print(sku_images_ids_dict)
-    spu_file = Path(r"D:\work\auto_image\data\litfad_final_selected_spus.csv")
-    save_dir = Path(r"D:\work\auto_image\data\A_image_dataset\metadata")
-    create_metadata_json(spu_file, save_dir)
+    # # 构建metadata json文件
+    # spu_file = Path(r"data/litfad_final_selected_spus.csv")
+    # save_dir = Path(r"data/A_image_dataset/metadata")
+    # create_metadata_json(spu_file, save_dir)
     
-    metadata_dir = Path(r"D:\work\auto_image\data\A_image_dataset\metadata")
-    base_image_dir = Path(r"D:\work\auto_image\data\A_image_dataset")
+    # 下载所有图片
+    metadata_dir = Path(r"data/A_image_dataset/metadata")
+    base_image_dir = Path(r"data/A_image_dataset")
     download_all_images(metadata_dir, base_image_dir)
