@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 
 @dataclass
@@ -33,7 +33,16 @@ class Config:
     cluster_mapping_file: str = "/root/auto_image/data/b_image_cluster_mapping.json"
     b_image_usage_file: str = "/root/auto_image/data/b_image_usage_counts.json"
 
-    
+
+    # ComfyUI 配置
+    comfyui_server_address: str = "127.0.0.1:8188"
+    comfyui_workflow_path: str = "workflow.json"
+    comfyui_node_mapping: Dict[str, str] = field(default_factory=lambda: {
+        "a_image_node": "191",
+        "b_image_node": "192",
+        "prompt_node": "6"
+    })
+
     # 其他配置
     # 指定处理的品类列表，如果为 None 或空列表，则处理所有品类
     specified_categories: Optional[List[str]] = field(default_factory=lambda: ['82 - Accent Chairs'])

@@ -22,8 +22,9 @@ from config import Config
 from src.feature_extractor import VITFeatureExtractor
 from src.b_image_sampling import BImageSampler
 from src.tools import load_b_img_path
-# from prompt_generator import generate_prompts_for_b_images
-# from comfyui_runner import run_comfyui_generation
+from src.prompt_generator import generate_prompt
+from src.comfyui_runner import ComfyUIRunner
+
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -72,7 +73,7 @@ def get_spu_list(a_image_path: Path, specified_categories:Optional[List]=None) -
     logging.info(f"发现 {len(spu_by_category)} 个品类。")
     return spu_by_category
 
-def process_spu(spu_id: str, category_name: str, config: Config, progress: Dict, extractor: VITFeatureExtractor, sampler: BImageSampler):
+def process_spu(spu_id: str, category_name: str, config: Config, progress: Dict, extractor: VITFeatureExtractor, sampler: BImageSampler, comfy_runner: ComfyUIRunner):
     """处理单个SPU的所有A图。"""
     spu_progress = progress.setdefault(category_name, {}).setdefault(spu_id, {})
     spu_path = Path(config.a_image_dataset_path) / category_name / spu_id
@@ -94,7 +95,7 @@ def process_spu(spu_id: str, category_name: str, config: Config, progress: Dict,
             a_image_id, a_image_path, 
             spu_id, category_name, 
             config, spu_progress, 
-            extractor, sampler)
+            extractor, sampler, comfy_runner)
         # 处理完一张A图后立即保存进度
         save_progress(progress, Path(config.progress_file_path))
 
@@ -103,7 +104,7 @@ def process_a_image(
         a_image_id: str, a_image_path: Path, 
         spu_id: str, category_name: str, 
         config: Config, spu_progress: Dict, 
-        extractor: VITFeatureExtractor, sampler: BImageSampler):
+        extractor: VITFeatureExtractor, sampler: BImageSampler, runner: ComfyUIRunner):
     """处理单张A图的完整流程：获取A图特征向量 -> 采样B图 -> 生成Prompt -> 生成C图。"""
     a_image_progress = spu_progress.setdefault(a_image_id, {})
     a_image_progress["a_image_path"] = str(a_image_path)
@@ -153,16 +154,48 @@ def process_a_image(
     # 3. 为B图生成Prompt
     if a_image_progress.get("b_images") and not a_image_progress.get("prompts_generated"):
         logging.info(f"为A图 {a_image_id} 的B图生成Prompt...")
-        # generate_prompts_for_b_images(a_image_progress["b_images"]) # 示例调用
-        # a_image_progress["prompts_generated"] = True
-        pass # 在此处实现或调用Prompt生成逻辑
+        for b_img in a_image_progress["b_images"]:
+            if not b_img.get("prompt"):
+                try:
+                    b_img["prompt"] = generate_prompt(b_img["b_image_path"])
+                except Exception as e:
+                    logging.error(f"为B图 {b_img['b_image_spu_id']} 生成Prompt时出错: {e}")
+                    return None # 如果Prompt生成失败，则跳过后续步骤, 该SPU判断为未完成
+        a_image_progress["prompts_generated"] = True
+
 
     # 4. 生成C图
     if a_image_progress.get("prompts_generated") and not a_image_progress.get("c_image_generated"):
         logging.info(f"为A图 {a_image_id} 生成C图...")
-        # run_comfyui_generation(a_image_path, a_image_progress["b_images"]) # 示例调用
-        # a_image_progress["c_image_generated"] = True
-        pass # 在此处实现或调用ComfyUI生成逻辑
+        if runner.is_server_running() is False:
+            logging.error("ComfyUI服务器未运行，无法生成C图。")
+            return None # 如果ComfyUI未运行，则跳过后续步骤, 该SPU判断为未完成
+        
+        all_c_images_generated = True
+        for i, b_img_info in enumerate(a_image_progress["b_images"]):
+            if b_img_info.get("c_image_path"):
+                continue # 如果这张C图已经生成，则跳过
+
+            c_image_dir = Path(config.c_image_dataset_path) / category_name / spu_id
+            c_image_filename = f"{a_image_id}_{i}" # 为每张C图生成唯一文件名
+
+            c_image_path = runner.generate_image(
+                a_image_path=a_image_progress["a_image_path"],
+                b_image_path=b_img_info["b_image_path"],
+                prompt_text=b_img_info["prompt"],
+                output_dir=c_image_dir,
+                output_filename=c_image_filename
+            )
+
+            if c_image_path:
+                b_img_info["c_image_path"] = c_image_path
+            else:
+                logging.error(f"为A图 {a_image_id} 和B图 {b_img_info['b_image_spu_id']} 生成C图失败。")
+                all_c_images_generated = False
+                break # 一旦有C图生成失败，就中断当前A图的处理
+
+        if all_c_images_generated:
+            a_image_progress["c_image_generated"] = True
 
     logging.info(f"完成A图处理: {a_image_id}")
     # 保存采样器的使用计数
@@ -193,29 +226,64 @@ def main():
         cluster_mapping_file=Path(cfg.cluster_mapping_file),
     )
     logging.info("B图采样器初始化完成。")
-    
+
+    # 初始化ComfyUI运行器
+    logging.info("初始化ComfyUI运行器...")
+    comfy_runner = ComfyUIRunner(
+        server_address=cfg.comfyui_server_address,
+        workflow_path=cfg.comfyui_workflow_path,
+        node_mapping=cfg.comfyui_node_mapping
+    )
+    logging.info("ComfyUI运行器初始化完成。")
+
+    # 在开始任务前，进行初始检查
+    if not comfy_runner.is_server_running():
+        logging.error("ComfyUI 服务器未运行。请先启动 ComfyUI。程序即将退出。")
+        return # 直接退出
+    logging.info("ComfyUI运行器初始化完成，服务器在线。")
+
     progress_data = load_progress(progress_file)
     
     spu_by_category = get_spu_list(Path(cfg.a_image_dataset_path), cfg.specified_categories)
 
-    for category, spu_list in spu_by_category.items():
-        logging.info(f"===== 开始处理品类: {category} =====")
-        for spu_id in spu_list:
-            if progress_data.get(category, {}).get(spu_id, {}).get("all_done"):
-                logging.info(f"SPU {spu_id} 已全部处理完成，跳过。")
-                continue
-            
-            logging.info(f"--- 处理SPU: {spu_id} ---")
-            process_spu(spu_id, category, cfg, progress_data, feature_extractor, b_img_sampler)
-            
-            # 标记整个SPU已完成
-            progress_data.setdefault(category, {}).setdefault(spu_id, {})["all_done"] = True
-            save_progress(progress_data, progress_file)
+    try:
+        for category, spu_list in spu_by_category.items():
+            logging.info(f"===== 开始处理品类: {category} =====")
+            spu_list = spu_list[:10]  # 测试时只处理前10个SPU，正式运行时可移除该行
+            for spu_id in spu_list:
+                if not comfy_runner.is_server_running():
+                    logging.error("检测到 ComfyUI 服务器连接中断。程序将终止。")
+                    # 跳出外层循环，以便执行 finally 块
+                    raise ConnectionError("ComfyUI 服务器不在线，请先启动ComfyUI服务器。启动命令示例: cd /root/autodl-tmp/ComfyUI && python main.py --listen")
+                
+                if progress_data.get(category, {}).get(spu_id, {}).get("all_done"):
+                    logging.info(f"SPU {spu_id} 已全部处理完成，跳过。")
+                    continue
+                
+                logging.info(f"--- 处理SPU: {spu_id} ---")
+                process_spu(spu_id, category, cfg, progress_data, feature_extractor, b_img_sampler, comfy_runner)
+                
+                # 标记整个SPU已完成
+                progress_data.setdefault(category, {}).setdefault(spu_id, {})["all_done"] = True
+                save_progress(progress_data, progress_file)
 
-        logging.info(f"===== 品类 {category} 处理完成 =====")
+            logging.info(f"===== 品类 {category} 处理完成 =====")
 
-    logging.info("所有任务处理完成！")
+        logging.info("所有任务处理完成！")
 
+    except ConnectionError as e:
+        # 捕获我们主动抛出的连接错误
+        logging.info(f"因服务器连接问题停止处理: {e}")
+    except Exception as e:
+        # 捕获其他意外错误
+        logging.error(f"处理过程中发生意外错误: {e}", exc_info=True)
+    finally:
+        # 确保无论程序是正常结束还是因错误中断，都会保存B图使用次数
+        logging.info("正在保存B图使用次数...")
+        b_img_sampler.save_usage_counts()
+        logging.info("B图使用次数已保存。")
+
+    logging.info("所有任务处理完成或已终止。")
 
 if __name__ == "__main__":
     main()

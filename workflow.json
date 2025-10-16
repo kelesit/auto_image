@@ -1,0 +1,260 @@
+{
+  "6": {
+    "inputs": {
+      "text": "change the background to a modern minimalist living room with light grey wide-plank wood flooring, white walls, a large window with sheer white curtains allowing soft natural daylight, a dark wood bookshelf filled with books and decorative items, a small potted plant in the corner, and a simple black metal floor lamp.",
+      "clip": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "31",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "31": {
+    "inputs": {
+      "seed": 848662185531593,
+      "steps": 20,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "189",
+        0
+      ],
+      "positive": [
+        "35",
+        0
+      ],
+      "negative": [
+        "135",
+        0
+      ],
+      "latent_image": [
+        "193",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "35": {
+    "inputs": {
+      "guidance": 2.5,
+      "conditioning": [
+        "196",
+        0
+      ]
+    },
+    "class_type": "FluxGuidance",
+    "_meta": {
+      "title": "Flux引导"
+    }
+  },
+  "38": {
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5xxl_fp8_e4m3fn.safetensors",
+      "type": "flux",
+      "device": "default"
+    },
+    "class_type": "DualCLIPLoader",
+    "_meta": {
+      "title": "双CLIP加载器"
+    }
+  },
+  "39": {
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "42": {
+    "inputs": {
+      "image": [
+        "146",
+        0
+      ]
+    },
+    "class_type": "FluxKontextImageScale",
+    "_meta": {
+      "title": "FluxKontextImageScale"
+    }
+  },
+  "124": {
+    "inputs": {
+      "pixels": [
+        "191",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "135": {
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "条件零化"
+    }
+  },
+  "136": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  },
+  "146": {
+    "inputs": {
+      "direction": "right",
+      "match_image_size": true,
+      "spacing_width": 0,
+      "spacing_color": "white",
+      "image1": [
+        "191",
+        0
+      ],
+      "image2": [
+        "192",
+        0
+      ]
+    },
+    "class_type": "ImageStitch",
+    "_meta": {
+      "title": "图像拼接"
+    }
+  },
+  "177": {
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ],
+      "latent": [
+        "124",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "ReferenceLatent"
+    }
+  },
+  "189": {
+    "inputs": {
+      "model_path": "svdq-int4_r32-flux.1-kontext-dev.safetensors",
+      "cache_threshold": 0,
+      "attention": "nunchaku-fp16",
+      "cpu_offload": "auto",
+      "device_id": 0,
+      "data_type": "bfloat16",
+      "i2f_mode": "enabled"
+    },
+    "class_type": "NunchakuFluxDiTLoader",
+    "_meta": {
+      "title": "Nunchaku FluxDiT 加载器"
+    }
+  },
+  "191": {
+    "inputs": {
+      "image": "2443498863.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "192": {
+    "inputs": {
+      "image": "2443714618.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "193": {
+    "inputs": {
+      "width": 800,
+      "height": 800,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "空Latent图像（SD3）"
+    }
+  },
+  "195": {
+    "inputs": {
+      "pixels": [
+        "192",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "196": {
+    "inputs": {
+      "conditioning": [
+        "177",
+        0
+      ],
+      "latent": [
+        "195",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "ReferenceLatent"
+    }
+  }
+}
