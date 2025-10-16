@@ -155,3 +155,12 @@ A_image_dataset/
 ## step 4: B图采样方案
 
 见docs/场景图批量替换功能文档.md
+
+
+
+
+
+## 注意
+当前B图库
+每个文档记录的image_id是无效的，还是需要通过spu_id获取主图id
+后续更新版本后需要更新image_id

@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 
 @dataclass
@@ -8,8 +9,9 @@ class Config:
 
     # 图像模型配置
     feature_dimension: int = 768  # VIT的特征维度
+    # 模型配置
+    model_path: str = "models/vit-base"
     model_name: str = "google/vit-base-patch16-224"
-    model_path: str = r'D:\work\auto_image\models\vit-base'
 
     # 文本模型配置
     text_model_name: str = "sentence-transformers/all-mpnet-base-v2"
@@ -22,4 +24,18 @@ class Config:
     es_user: str = "elastic"
     es_password: str = "123456"
 
+    # 数据路径
+    a_image_dataset_path: str = "/root/autodl-tmp/A_image_dataset"
+    b_image_dataset_path: str = "/root/autodl-tmp/B_image_dataset"
+    c_image_dataset_path: str = "/root/autodl-tmp/C_image_dataset"
+    progress_file_path: str = "/root/auto_image/data/progress.json"
+    vectors_path: str = "/root/autodl-tmp/A_image_vectors"
+    cluster_mapping_file: str = "/root/auto_image/data/b_image_cluster_mapping.json"
+    b_image_usage_file: str = "/root/auto_image/data/b_image_usage_counts.json"
+
     
+    # 其他配置
+    # 指定处理的品类列表，如果为 None 或空列表，则处理所有品类
+    specified_categories: Optional[List[str]] = field(default_factory=lambda: ['82 - Accent Chairs'])
+    num_b_images: int = 2  # 每张A图采样的B图数量
+

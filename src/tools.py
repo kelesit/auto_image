@@ -1,7 +1,10 @@
 import os
 import numpy as np
 import pandas as pd
-
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+import json
+import requests
 
 def load_spu_vectors(data_dir='./data/preprocess'):
     """
@@ -275,5 +278,81 @@ def example_usage():
     print(f"SPU 12345 和 SPU 67890 的相似度: {similarity}")
 
 
+def image_downloader(img_id, save_dir: Path) -> Optional[Path]:
+    """下载图片并保存到指定目录，返回图片路径
+    save_dir: Path - 图片保存目录 (如: Path("A_image_dataset/90 - Coffee Tables/spu_123456/"))
+    """
+    img_download_url = f"https://erp.baycheer.com/upload/product/{img_id}.jpg"
+    
+    # 判断保存目录是否存在，不存在则创建
+    if not save_dir.exists():
+        save_dir.mkdir(parents=True, exist_ok=True)
+    img_path = save_dir / f"{img_id}.jpg"
+
+
+    response = requests.get(
+        img_download_url, 
+        params={
+            'app_id': 392013,
+            'app_token': 'URC2P3GKZGDPFAAX8M61LQ88NLRRO3T9'
+        }
+    )
+    if response.status_code == 200:
+        with open(img_path, "wb") as f:
+            f.write(response.content)
+        return img_path
+    else:
+        print(f"Failed to download image for image_id: {img_id}")
+        return None
+
+def get_main_images_id(spu_id:int):
+    DOWNLOAD_URL = 'https://erp.baycheer.com/api/fileAccess/getSpuImage'
+    params = {
+        "app_id": 392013,
+        "app_token": 'URC2P3GKZGDPFAAX8M61LQ88NLRRO3T9',
+        "spu_id": spu_id,
+        "image_type_id": '2524'
+    }
+    response = requests.get(DOWNLOAD_URL, params=params)
+    if response.status_code == 200:
+        resp = response.json()
+        if resp['code'] == 0:
+            data = resp['data']
+            for item in data:
+                if item['is_cover_image'] == 1:
+                    return item['product_image_id']
+            return None
+        else:
+            print(f"Error in response for spu_id: {spu_id}, message: {resp['msg']}")
+            return None
+    else:
+        print(f"HTTP error {response.status_code} for spu_id: {spu_id}")
+        return None
+
+
+
+def load_b_img_path(b_image_spu_id: str, b_img_dir:Path) -> str:
+    """
+    根据B图ID获取本地存储路径
+    如果有本地文件则返回路径，
+    否则使用api下载并保存到本地后返回路径
+    """
+    b_image_path = b_img_dir / f"{b_image_spu_id}.jpg"
+    if b_image_path.exists():
+        return str(b_image_path)
+    else:
+        main_img_id = get_main_images_id(int(b_image_spu_id))
+        if main_img_id is None:
+            print(f"无法获取B图ID {b_image_spu_id} 的主图ID")
+            return None
+        downloaded_path = image_downloader(main_img_id, b_img_dir)
+        if downloaded_path:
+            return str(downloaded_path)
+        else:
+            return None
+        
+
 if __name__ == "__main__":
-    example_usage()
+    b_image_spu_id = 21458015
+    b_img_dir = Path('/root/autodl-tmp/B_image_dataset/82 - Accent Chairs')
+    b_image_path = load_b_img_path(b_image_spu_id, b_img_dir=b_img_dir)
