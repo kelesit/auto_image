@@ -178,11 +178,12 @@ def process_a_image(
 
             c_image_dir = Path(config.c_image_dataset_path) / category_name / spu_id
             c_image_filename = f"{a_image_id}_{i}" # 为每张C图生成唯一文件名
-
+            text_prompt2 = f"remove the {category_name.split(' - ')[1]}, only keep the background"
             c_image_path = runner.generate_image(
                 a_image_path=a_image_progress["a_image_path"],
                 b_image_path=b_img_info["b_image_path"],
                 prompt_text=b_img_info["prompt"],
+                prompt_text2=text_prompt2,
                 output_dir=c_image_dir,
                 output_filename=c_image_filename
             )
@@ -249,7 +250,7 @@ def main():
     try:
         for category, spu_list in spu_by_category.items():
             logging.info(f"===== 开始处理品类: {category} =====")
-            spu_list = spu_list[:10]  # 测试时只处理前10个SPU，正式运行时可移除该行
+            spu_list = spu_list[11:15]  # 测试时只处理前10个SPU，正式运行时可移除该行
             for spu_id in spu_list:
                 if not comfy_runner.is_server_running():
                     logging.error("检测到 ComfyUI 服务器连接中断。程序将终止。")

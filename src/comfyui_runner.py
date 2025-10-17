@@ -117,7 +117,7 @@ class ComfyUIRunner:
                 output_images[node_id] = images_output
         return output_images
 
-    def generate_image(self, a_image_path: str, b_image_path: str, prompt_text: str, output_dir: Path, output_filename: str) -> str | None:
+    def generate_image(self, a_image_path: str, b_image_path: str, prompt_text: str, prompt_text2:str, output_dir: Path, output_filename: str) -> str | None:
         """
         生成单张C图。
         """
@@ -137,6 +137,7 @@ class ComfyUIRunner:
         a_node = self.node_mapping.get("a_image_node")
         b_node = self.node_mapping.get("b_image_node")
         prompt_node = self.node_mapping.get("prompt_node")
+        prompt_node2 = self.node_mapping.get("prompt_node2")
 
         if not all([a_node, b_node, prompt_node]):
             logger.error("节点映射不完整，请检查配置。")
@@ -145,6 +146,7 @@ class ComfyUIRunner:
         prompt_workflow[a_node]["inputs"]["image"] = a_image_filename
         prompt_workflow[b_node]["inputs"]["image"] = b_image_filename
         prompt_workflow[prompt_node]["inputs"]["text"] = prompt_text
+        prompt_workflow[prompt_node2]["inputs"]["text"] = prompt_text2
         
         # 3. 执行并获取图片
         ws = websocket.WebSocket()
@@ -186,11 +188,12 @@ if __name__ == '__main__':
 
     # 1. 定义配置
     SERVER_ADDRESS = "127.0.0.1:8188"
-    WORKFLOW_PATH = "workflow.json"
+    WORKFLOW_PATH = "换图小子2.0.json"
     NODE_MAPPING = {
         "a_image_node": "191",
         "b_image_node": "192",
-        "prompt_node": "6"
+        "prompt_node": "6",
+        "prompt_node2": "197"  # 如果有第二个文本节点，可以取消注释并设置
     }
     
     # 2. 初始化运行器
@@ -203,10 +206,12 @@ if __name__ == '__main__':
     # 3. 检查服务器状态并执行任务
     if runner.is_server_running():
         logger.info("服务器在线，准备开始生成任务。")
-        
-        a_img_path = "/root/auto_image/src/2443498863.png"
-        b_img_path = "/root/auto_image/src/2443714618.png"
-        text_prompt = "change the background to a modern minimalist living room with light grey wide-plank wood flooring, white walls, a large window with sheer white curtains allowing soft natural daylight, a dark wood bookshelf filled with books and decorative items, a small potted plant in the corner, and a simple black metal floor lamp."
+        category = "82 - Accent Chairs"
+        category_name = category.split(" - ")[1]
+        a_img_path = "/root/auto_image/src/2449377982.jpg"
+        b_img_path = "/root/auto_image/src/2423718322.jpg"
+        text_prompt = "change the background to a minimalist studio space with a light grey concrete floor and a textured off-white plaster wall, illuminated by soft, diffused natural light."
+        text_prompt2 = f"remove the {category_name}, only keep the background"
         output_directory = Path("./output_images")
         output_file = "test_generation_01"
 
@@ -217,6 +222,7 @@ if __name__ == '__main__':
                 a_image_path=a_img_path,
                 b_image_path=b_img_path,
                 prompt_text=text_prompt,
+                prompt_text2=text_prompt2,
                 output_dir=output_directory,
                 output_filename=output_file
             )
