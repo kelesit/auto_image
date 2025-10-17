@@ -280,6 +280,8 @@ def main():
                 progress_data.setdefault(category, {}).setdefault(spu_id, {})["all_done"] = True
                 save_progress(progress_data, progress_file)
 
+                logging.info(f"该品类已处理SPU数: {len(progress_data.get(category, {}))} / {len(spu_list)}")
+
             logging.info(f"===== 品类 {category} 处理完成 =====")
 
         logging.info("所有任务处理完成！")
