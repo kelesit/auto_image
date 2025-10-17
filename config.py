@@ -36,12 +36,12 @@ class Config:
 
     # ComfyUI 配置
     comfyui_server_address: str = "127.0.0.1:8188"
-    comfyui_workflow_path: str = "换图小子2.0.json"
+    comfyui_workflow_path: str = "换图小子.json"
     comfyui_node_mapping: Dict[str, str] = field(default_factory=lambda: {
         "a_image_node": "191",
         "b_image_node": "192",
         "prompt_node": "6",
-        "prompt_node2": "197"
+        "prompt_node2": "198"
     })
 
     # 其他配置

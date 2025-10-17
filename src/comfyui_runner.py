@@ -21,6 +21,7 @@ class ComfyUIRunner:
             server_address (str): ComfyUI 服务器地址，例如 "127.0.0.1:8188"
             workflow_path (str): ComfyUI workflow API 格式的 JSON 文件路径
             node_mapping (dict): 映射了要修改的节点和内容类型
+            output_node_id (str): 最终生成图片的节点的ID
         """
         self.server_address = server_address
         self.base_url = f"http://{self.server_address}"
@@ -138,6 +139,7 @@ class ComfyUIRunner:
         b_node = self.node_mapping.get("b_image_node")
         prompt_node = self.node_mapping.get("prompt_node")
         prompt_node2 = self.node_mapping.get("prompt_node2")
+        output_node = self.node_mapping.get("output_node")
 
         if not all([a_node, b_node, prompt_node]):
             logger.error("节点映射不完整，请检查配置。")
@@ -167,18 +169,22 @@ class ComfyUIRunner:
 
         # 4. 保存图片
         output_dir.mkdir(parents=True, exist_ok=True)
-        for node_id, image_list in images.items():
-            if image_list:
-                try:
-                    image_data = image_list[0]
-                    image = Image.open(io.BytesIO(image_data))
-                    final_path = output_dir / f"{output_filename}.png"
-                    image.save(final_path)
-                    logger.info(f"成功保存C图到: {final_path}")
-                    return str(final_path)
-                except Exception as e:
-                    logger.error(f"保存图片时出错: {e}")
-        
+        image_list = images.get(output_node)
+
+        if image_list:
+            try:
+                image_data = image_list[0]
+                image = Image.open(io.BytesIO(image_data))
+                final_path = output_dir / f"{output_filename}.png"
+                image.save(final_path)
+                logger.info(f"成功保存C图到: {final_path}")
+                return str(final_path)
+            except Exception as e:
+                logger.error(f"保存图片时出错: {e}")
+        else:
+            logger.error(f"在指定的输出节点 '{output_node}' 中未找到图片。")
+            logger.warning(f"可用的输出节点: {list(images.keys())}")
+
         return None
 
 if __name__ == '__main__':
@@ -188,12 +194,13 @@ if __name__ == '__main__':
 
     # 1. 定义配置
     SERVER_ADDRESS = "127.0.0.1:8188"
-    WORKFLOW_PATH = "换图小子2.0.json"
+    WORKFLOW_PATH = "/root/auto_image/换图小子.json"
     NODE_MAPPING = {
         "a_image_node": "191",
         "b_image_node": "192",
         "prompt_node": "6",
-        "prompt_node2": "197"  # 如果有第二个文本节点，可以取消注释并设置
+        "prompt_node2": "198",  # 如果有第二个文本节点，可以取消注释并设置
+        "output_node": "136" # 这是最终生成图像的节点ID, 例如 KSampler
     }
     
     # 2. 初始化运行器
@@ -208,9 +215,9 @@ if __name__ == '__main__':
         logger.info("服务器在线，准备开始生成任务。")
         category = "82 - Accent Chairs"
         category_name = category.split(" - ")[1]
-        a_img_path = "/root/auto_image/src/2449377982.jpg"
-        b_img_path = "/root/auto_image/src/2423718322.jpg"
-        text_prompt = "change the background to a minimalist studio space with a light grey concrete floor and a textured off-white plaster wall, illuminated by soft, diffused natural light."
+        a_img_path = "/root/auto_image/src/2450010529.jpg"
+        b_img_path = "/root/auto_image/src/2430449463.jpg"
+        text_prompt = "change the background to a cozy living room with light beige carpeting, wooden blinds casting striped shadows on the wall, sheer off-white curtains with scalloped trim, and a textured wood-paneled accent wall, illuminated by warm natural daylight."
         text_prompt2 = f"remove the {category_name}, only keep the background"
         output_directory = Path("./output_images")
         output_file = "test_generation_01"

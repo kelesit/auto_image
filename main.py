@@ -247,10 +247,22 @@ def main():
     
     spu_by_category = get_spu_list(Path(cfg.a_image_dataset_path), cfg.specified_categories)
 
+    # 原本要7000个，现在只要3000个SPU(所有品类加起来)所以要等比例缩减
+    total_spu_count = sum(len(spu_list) for spu_list in spu_by_category.values())
+    if total_spu_count > 3000:
+        reduction_ratio = 3000 / total_spu_count
+        logging.info(f"当前总SPU数为 {total_spu_count}，超过3000，按比例缩减至3000。缩减比例: {reduction_ratio:.4f}")
+        for category in spu_by_category:
+            original_count = len(spu_by_category[category])
+            new_count = max(1, int(original_count * reduction_ratio))  # 确保至少保留1个SPU
+            spu_by_category[category] = spu_by_category[category][:new_count]
+            logging.info(f"品类 {category} 从 {original_count} 个SPU 缩减到 {new_count} 个SPU。")
+
     try:
         for category, spu_list in spu_by_category.items():
             logging.info(f"===== 开始处理品类: {category} =====")
-            spu_list = spu_list[11:15]  # 测试时只处理前10个SPU，正式运行时可移除该行
+            
+            # spu_list = spu_list[:5]  # 测试时只处理前10个SPU，正式运行时可移除该行
             for spu_id in spu_list:
                 if not comfy_runner.is_server_running():
                     logging.error("检测到 ComfyUI 服务器连接中断。程序将终止。")
