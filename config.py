@@ -41,7 +41,8 @@ class Config:
         "a_image_node": "191",
         "b_image_node": "192",
         "prompt_node": "6",
-        "prompt_node2": "198"
+        "prompt_node2": "198",
+        "output_node": "136"
     })
 
     # 其他配置
