@@ -278,5 +278,12 @@ if __name__ == "__main__":
     
     # 下载所有图片
     metadata_dir = Path(r"data/A_image_dataset/metadata")
-    base_image_dir = Path(r"data/A_image_dataset")
-    download_all_images(metadata_dir, base_image_dir)
+    base_image_dir = Path(r"/root/autodl-tmp/A_image_dataset")
+    selected_categories = ['218 - Plant Stands & Tables']
+    if selected_categories:
+        for category in selected_categories:
+            json_file = metadata_dir / f"images_metadata_{category}.json"
+            category_save_dir = base_image_dir / category
+            download_images_from_metadata_json(json_file, category_save_dir)
+    else:
+        download_all_images(metadata_dir, base_image_dir)

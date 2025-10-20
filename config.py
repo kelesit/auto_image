@@ -36,7 +36,7 @@ class Config:
 
     # ComfyUI 配置
     comfyui_server_address: str = "127.0.0.1:8188"
-    comfyui_workflow_path: str = "换图小子.json"
+    comfyui_workflow_path: str = "换图小子4090.json"
     comfyui_node_mapping: Dict[str, str] = field(default_factory=lambda: {
         "a_image_node": "191",
         "b_image_node": "192",
@@ -47,6 +47,6 @@ class Config:
 
     # 其他配置
     # 指定处理的品类列表，如果为 None 或空列表，则处理所有品类
-    specified_categories: Optional[List[str]] = field(default_factory=lambda: ['82 - Accent Chairs'])
+    specified_categories: Optional[List[str]] = field(default_factory=lambda: ['218 - Plant Stands & Tables'])
     num_b_images: int = 2  # 每张A图采样的B图数量
 
