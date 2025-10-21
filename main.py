@@ -16,11 +16,11 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from PIL import Image
 import torch
-
+import pickle
 from config import Config
 
 from src.feature_extractor import VITFeatureExtractor
-from src.b_image_sampling import BImageSampler
+from src.b_image_sampling import BImageSampler, get_saled_spus
 from src.tools import load_b_img_path
 from src.prompt_generator import generate_prompt
 from src.comfyui_runner import ComfyUIRunner
@@ -73,6 +73,23 @@ def get_spu_list(a_image_path: Path, specified_categories:Optional[List]=None) -
     logging.info(f"发现 {len(spu_by_category)} 个品类。")
     return spu_by_category
 
+def get_all_b_spus(category: str, b_data_dir: Path) -> List[str]:
+    """获取指定品类下B图数据集中的所有SPU ID。"""
+    category_file_path = b_data_dir / f'{category}.pkl'
+    if not category_file_path.exists():
+        logging.warning(f"B图品类文件不存在: {category_file_path}")
+        return []
+    try:
+        with open(category_file_path, 'rb') as f:
+            data = pickle.load(f)
+        spu_ids = {str(doc['spu_id']) for doc in data}
+        return list(spu_ids)
+    except Exception as e:
+        logging.error(f"加载B图品类数据失败: {e}")
+        return []
+
+
+
 def process_spu(spu_id: str, category_name: str, config: Config, progress: Dict, extractor: VITFeatureExtractor, sampler: BImageSampler, comfy_runner: ComfyUIRunner):
     """处理单个SPU的所有A图。"""
     spu_progress = progress.setdefault(category_name, {}).setdefault(spu_id, {})
@@ -93,7 +110,7 @@ def process_spu(spu_id: str, category_name: str, config: Config, progress: Dict,
         logging.info(f"开始处理A图: {a_image_id} (SPU: {spu_id})")
         process_a_image(
             a_image_id, a_image_path, 
-            spu_id, category_name, 
+            spu_id, category_name,
             config, spu_progress, 
             extractor, sampler, comfy_runner)
         # 处理完一张A图后立即保存进度
@@ -102,7 +119,7 @@ def process_spu(spu_id: str, category_name: str, config: Config, progress: Dict,
 
 def process_a_image(
         a_image_id: str, a_image_path: Path, 
-        spu_id: str, category_name: str, 
+        spu_id: str, category_name: str,
         config: Config, spu_progress: Dict, 
         extractor: VITFeatureExtractor, sampler: BImageSampler, runner: ComfyUIRunner):
     """处理单张A图的完整流程：获取A图特征向量 -> 采样B图 -> 生成Prompt -> 生成C图。"""
@@ -134,18 +151,68 @@ def process_a_image(
     if "b_images" not in a_image_progress or len(a_image_progress['b_images']):
         logging.info(f"为A图 {a_image_id} 采样B图...")
         a_vector = torch.load(a_image_progress["a_image_vector_path"], weights_only=True)
-        sampled_b_images_docs = sampler.sample_b_images_for_a(a_vector, category_name, config.num_b_images)
+        
+        # 准备SPU列表
+        saled_spus = get_saled_spus(category_name)
+        all_b_spus_in_category = get_all_b_spus(category_name, Path(config.b_image_dataset_path) / 'es_docs')
+        unsaled_spus = list(set(all_b_spus_in_category) - set(saled_spus))
+        
+        sampled_b_images_docs = []
+
+        # 策略1: 从未售SPU中采样最远的
+        if unsaled_spus:
+            b1 = sampler.sample_b_images_for_a(a_vector, category_name, 1, strategy="farthest", spu_list=unsaled_spus)
+            if b1:
+                b1[0]['sampling_strategy'] = 'farthest_unsaled'
+                sampled_b_images_docs.extend(b1)
+                logging.info("策略1 (farthest_unsaled) 采样成功。")
+            else:
+                logging.warning("策略1 (farthest_unsaled) 未采样到B图。")
+        else:
+            logging.warning("策略1 (farthest_unsaled) 因无未售SPU而跳过。")
+
+        # 策略2: 从未售SPU中采样最近的
+        if unsaled_spus:
+            b2 = sampler.sample_b_images_for_a(a_vector, category_name, 1, strategy="closest", spu_list=unsaled_spus)
+            if b2:
+                b2[0]['sampling_strategy'] = 'closest_unsaled'
+                sampled_b_images_docs.extend(b2)
+                logging.info("策略2 (closest_unsaled) 采样成功。")
+            else:
+                logging.warning("策略2 (closest_unsaled) 未采样到B图。")
+        else:
+            logging.warning("策略2 (closest_unsaled) 因无未售SPU而跳过。")
+
+        # 策略3: 从已售SPU中采样最远的
+        if saled_spus:
+            b3 = sampler.sample_b_images_for_a(a_vector, category_name, 1, strategy="farthest", spu_list=saled_spus)
+            if b3:
+                b3[0]['sampling_strategy'] = 'farthest_saled'
+                sampled_b_images_docs.extend(b3)
+                logging.info("策略3 (farthest_saled) 采样成功。")
+            else:
+                logging.warning("策略3 (farthest_saled) 未采样到B图。")
+        else:
+            logging.warning("策略3 (farthest_saled) 因无已售SPU而跳过。")
+
+        # sampled_b_images_docs = sampler.sample_b_images_for_a(a_vector, category_name, config.num_b_images)
         a_image_progress["b_images"] = []
+        if not sampled_b_images_docs:
+            logging.warning(f"未能为A图 {a_image_id} 采样到任何B图。")
+            return
+        
         for b_img in sampled_b_images_docs:
             b_image_spu_id = b_img["spu_id"]
             b_image_path = load_b_img_path(b_image_spu_id, b_img_dir=Path(config.b_image_dataset_path) / category_name)
             if not b_image_path:
                 logging.warning(f"SPU {spu_id} 的A图 {a_image_id} 采样的B图 SPU: {b_image_spu_id} 主图 下载失败。")
                 return None # 如果B图下载失败，则跳过后续步骤, 该SPU判断为未完成
+            
             b_img_dict = {
                 "b_image_spu_id": b_image_spu_id,
                 "b_image_path": b_image_path,
                 "score": b_img["score"],
+                "sampling_strategy": b_img["sampling_strategy"], # 记录采样策略
                 "prompt": "",
                 "c_image_path": ""
             }
@@ -259,7 +326,6 @@ def main():
     try:
         for category, spu_list in spu_by_category.items():
             logging.info(f"===== 开始处理品类: {category} =====")
-            
             # spu_list = spu_list[:5]  # 测试时只处理前10个SPU，正式运行时可移除该行
             for spu_id in spu_list:
                 if not comfy_runner.is_server_running():
