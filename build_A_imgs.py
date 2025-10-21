@@ -279,7 +279,7 @@ if __name__ == "__main__":
     # 下载所有图片
     metadata_dir = Path(r"data/A_image_dataset/metadata")
     base_image_dir = Path(r"/root/autodl-tmp/A_image_dataset")
-    selected_categories = ['218 - Plant Stands & Tables', '90 - Coffee Tables']
+    selected_categories = ['90 - Coffee Tables']
     if selected_categories:
         for category in selected_categories:
             json_file = metadata_dir / f"images_metadata_{category}.json"
