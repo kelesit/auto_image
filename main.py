@@ -21,7 +21,7 @@ from config import Config
 
 from src.feature_extractor import VITFeatureExtractor
 from src.b_image_sampling import BImageSampler, get_saled_spus
-from src.tools import load_b_img_path
+from src.tools import load_b_img_path, image_downloader
 from src.prompt_generator import generate_prompt
 from src.comfyui_runner import ComfyUIRunner
 
@@ -46,32 +46,35 @@ def save_progress(progress_data: Dict, progress_file: Path):
     with open(progress_file, 'w', encoding='utf-8') as f:
         json.dump(progress_data, f, indent=4)
 
-def get_spu_list(a_image_path: Path, specified_categories:Optional[List]=None) -> Dict[str, List[str]]:
+def get_spu_list(metadata_dir: Path, specified_categories:Optional[List]=None) -> Dict[str, List[str]]:
     """
-    扫描A图数据集路径，获取所有品类及其下的SPU ID。
+    扫描metadata文件夹，获取所有品类及其下的SPU ID。
     返回: {"category_name": ["spu_id_1", "spu_id_2", ...]}
     """
     spu_by_category = {}
     if specified_categories:
         for category in specified_categories:
-            category_dir = a_image_path / category
-            if category_dir.exists() and category_dir.is_dir():
-                spu_ids = [spu_dir.name for spu_dir in category_dir.iterdir() if spu_dir.is_dir()]
-                if spu_ids:
-                    spu_by_category[category] = spu_ids
+            metadata_of_category = metadata_dir / f"images_metadata_{category}.json"
+            if metadata_of_category.exists():
+                with open(metadata_of_category, 'r', encoding='utf-8') as f:
+                    images_id_dicts_list = json.load(f)
+                spu_ids = [str(images_id_dict['spu_id']) for images_id_dict in images_id_dicts_list]
+                spu_by_category[category] = spu_ids
+                logging.info(f"品类 {category} 发现 {len(spu_ids)} 个SPU。")
             else:
-                logging.warning(f"指定的品类路径不存在或不是目录: {category_dir}")
+                logging.warning(f"指定的品类文件不存在: {metadata_of_category}")
         logging.info(f"发现 {len(spu_by_category)} 个指定品类。")
         return spu_by_category
-    
-    for category_dir in a_image_path.iterdir():
-        if category_dir.is_dir():
-            category_name = category_dir.name
-            spu_ids = [spu_dir.name for spu_dir in category_dir.iterdir() if spu_dir.is_dir()]
-            if spu_ids:
-                spu_by_category[category_name] = spu_ids
-    logging.info(f"发现 {len(spu_by_category)} 个品类。")
-    return spu_by_category
+    else:
+        for metadata_file in metadata_dir.glob("images_metadata_*.json"):
+            category_name = metadata_file.stem.replace("images_metadata_", "")
+            with open(metadata_file, 'r', encoding='utf-8') as f:
+                images_id_dicts_list = json.load(f)
+            spu_ids = [str(images_id_dict['spu_id']) for images_id_dict in images_id_dicts_list]
+            spu_by_category[category_name] = spu_ids
+            logging.info(f"品类 {category_name} 发现 {len(spu_ids)} 个SPU。")
+        logging.info(f"共发现 {len(spu_by_category)} 个品类。")
+        return spu_by_category
 
 def get_all_b_spus(category: str, b_data_dir: Path) -> List[str]:
     """获取指定品类下B图数据集中的所有SPU ID。"""
@@ -94,10 +97,37 @@ def process_spu(spu_id: str, category_name: str, config: Config, progress: Dict,
     """处理单个SPU的所有A图。"""
     spu_progress = progress.setdefault(category_name, {}).setdefault(spu_id, {})
     spu_path = Path(config.a_image_dataset_path) / category_name / spu_id
-    
+
+    # 下载该SPU的所有图片（如果尚未下载）
     if not spu_path.exists():
-        logging.warning(f"SPU路径不存在: {spu_path}")
-        return
+        logging.info(f"SPU目录不存在，开始下载SPU {spu_id} 的所需的A图...")
+        meta_json_path = Path(config.metadata_dir) / f"images_metadata_{category_name}.json"
+        with open(meta_json_path, "r", encoding="utf-8") as f:
+            images_id_dicts_list = json.load(f)
+        spu_imgs_info = None
+        for item in images_id_dicts_list:
+            if str(item['spu_id']) == str(spu_id):  # 确保类型一致
+                spu_imgs_info = item
+                break
+        
+        if spu_imgs_info is None:
+            logging.warning(f"未找到SPU {spu_id} 的元数据信息")
+            return None
+        spu_path.mkdir(parents=True, exist_ok=True)
+        # 下载主图
+        main_image_id = spu_imgs_info.get('main_image_id')
+        if main_image_id:
+            image_downloader(main_image_id, spu_path)
+        
+        # 下载场景图
+        scene_image_ids = spu_imgs_info.get('scene_image_ids', [])
+        for scene_image_id in scene_image_ids:
+            image_downloader(scene_image_id, spu_path)
+        
+        # 下载SKU图
+        sku_image_ids = spu_imgs_info.get('sku_image_ids', [])
+        for sku_image_id in sku_image_ids:
+            image_downloader(sku_image_id, spu_path)
 
     a_image_files = [f for f in spu_path.iterdir() if f.suffix.lower() in ['.jpg', '.png', '.jpeg']]
 
@@ -312,7 +342,7 @@ def main():
 
     progress_data = load_progress(progress_file)
     
-    spu_by_category = get_spu_list(Path(cfg.a_image_dataset_path), cfg.specified_categories)
+    spu_by_category = get_spu_list(Path(cfg.metadata_dir), cfg.specified_categories)
 
     reduction_ratio = 3.0 / 7.0
     total_spu_count = sum(len(spu_list) for spu_list in spu_by_category.values())

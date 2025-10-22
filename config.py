@@ -29,6 +29,7 @@ class Config:
     b_image_dataset_path: str = "/root/autodl-tmp/B_image_dataset"
     c_image_dataset_path: str = "/root/autodl-tmp/C_image_dataset"
     progress_file_path: str = "/root/auto_image/data/progress.json"
+    metadata_dir: str = "/root/auto_image/data/A_image_dataset/metadata"
     vectors_path: str = "/root/autodl-tmp/A_image_vectors"
     cluster_mapping_file: str = "/root/auto_image/data/b_image_cluster_mapping.json"
     b_image_usage_file: str = "/root/auto_image/data/b_image_usage_counts.json"
