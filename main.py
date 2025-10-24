@@ -344,14 +344,14 @@ def main():
     
     spu_by_category = get_spu_list(Path(cfg.metadata_dir), cfg.specified_categories)
 
-    reduction_ratio = 3.0 / 7.0
-    total_spu_count = sum(len(spu_list) for spu_list in spu_by_category.values())
-    logging.info(f"当前总SPU数为 {total_spu_count}，超过3000，按比例缩减至3000。缩减比例: {reduction_ratio:.4f}")
-    for category in spu_by_category:
-        original_count = len(spu_by_category[category])
-        new_count = max(1, int(original_count * reduction_ratio))  # 确保至少保留1个SPU
-        spu_by_category[category] = spu_by_category[category][:new_count]
-        logging.info(f"品类 {category} 从 {original_count} 个SPU 缩减到 {new_count} 个SPU。")
+    # reduction_ratio = 3.0 / 7.0
+    # total_spu_count = sum(len(spu_list) for spu_list in spu_by_category.values())
+    # logging.info(f"当前总SPU数为 {total_spu_count}，超过3000，按比例缩减至3000。缩减比例: {reduction_ratio:.4f}")
+    # for category in spu_by_category:
+    #     original_count = len(spu_by_category[category])
+    #     new_count = max(1, int(original_count * reduction_ratio))  # 确保至少保留1个SPU
+    #     spu_by_category[category] = spu_by_category[category][:new_count]
+    #     logging.info(f"品类 {category} 从 {original_count} 个SPU 缩减到 {new_count} 个SPU。")
 
     try:
         for category, spu_list in spu_by_category.items():
