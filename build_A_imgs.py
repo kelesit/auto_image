@@ -270,7 +270,62 @@ def download_all_images(metadata_dir: Path, base_image_dir: Path):
     print("All images from all categories downloaded.")
 
 
-if __name__ == "__main__":
+
+def download_images_from_metadata_json_with_specified_spus(meta_json_path: Path, base_save_dir: Path, specified_spus: List[int]):
+    """
+    从metadata JSON文件中读取图片id，下载指定spu的图片并保存到指定目录
+    meta_json_path: Path - 包含图片id的JSON文件 (如: Path("A_image_dataset/metadata/images_metadata_CategoryA.json"))
+    base_save_dir: Path - 图片保存的基础目录 (如: Path("A_image_dataset/CategoryA/"))
+    specified_spus: List[int] - 指定要下载图片的spu_id列表
+    """
+    import json
+
+    with open(meta_json_path, "r", encoding="utf-8") as f:
+        images_id_dicts_list = json.load(f)
+    category = meta_json_path.stem.replace("images_metadata_", "")
+    for images_id_dict in tqdm(images_id_dicts_list, desc=f"Downloading specified {category} images"):
+        spu_id = images_id_dict['spu_id']
+        if str(spu_id) not in specified_spus:
+            continue
+        spu_save_dir = base_save_dir / f"{spu_id}"
+        
+        # 下载主图
+        main_image_id = images_id_dict.get('main_image_id')
+        if main_image_id:
+            image_downloader(main_image_id, spu_save_dir)
+        
+        # 下载场景图
+        scene_image_ids = images_id_dict.get('scene_image_ids', [])
+        for scene_image_id in scene_image_ids:
+            image_downloader(scene_image_id, spu_save_dir)
+        
+        # 下载SKU图
+        sku_image_ids = images_id_dict.get('sku_image_ids', [])
+        for sku_image_id in sku_image_ids:
+            image_downloader(sku_image_id, spu_save_dir)
+    
+    print(f"Specified {category} images downloaded and saved to {base_save_dir}")
+
+def build_a_imgs_with_specified_spus():
+    import json
+    specified_spus_file = '/root/auto_image/spu_by_category.json'
+    with open(specified_spus_file, 'r', encoding='utf-8') as f:
+        spu_by_category = json.load(f)
+    # 下载所有图片
+    metadata_dir = Path(r"data/A_image_dataset/metadata")
+    base_image_dir = Path(r"/root/autodl-tmp/A_image_dataset")
+    selected_categories = ['90 - Coffee Tables']
+    if selected_categories:
+        for category in selected_categories:
+            json_file = metadata_dir / f"images_metadata_{category}.json"
+            category_save_dir = base_image_dir / category
+            specified_spus = spu_by_category.get(category, [])
+            download_images_from_metadata_json_with_specified_spus(json_file, category_save_dir, specified_spus)
+    else:
+        download_all_images(metadata_dir, base_image_dir)
+
+
+def main():
     # # 构建metadata json文件
     # spu_file = Path(r"data/litfad_final_selected_spus.csv")
     # save_dir = Path(r"data/A_image_dataset/metadata")
@@ -287,3 +342,7 @@ if __name__ == "__main__":
             download_images_from_metadata_json(json_file, category_save_dir)
     else:
         download_all_images(metadata_dir, base_image_dir)
+
+if __name__ == "__main__":
+    # main()
+    build_a_imgs_with_specified_spus()
