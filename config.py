@@ -49,5 +49,5 @@ class Config:
     # 其他配置
     # 指定处理的品类列表，如果为 None 或空列表，则处理所有品类
     specified_categories: Optional[List[str]] = field(default_factory=lambda: ['90 - Coffee Tables'])
-    num_b_images: int = 2  # 每张A图采样的B图数量
+    num_b_images: int = 1  # 每张A图采样的B图数量
 
