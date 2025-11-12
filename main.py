@@ -210,6 +210,12 @@ def process_a_image(
                 logging.info("策略2 (closest_unsaled) 采样成功。")
             else:
                 logging.warning("策略2 (closest_unsaled) 未采样到B图。")
+                b2 = [{
+                    "spu_id": -1,
+                    "score": 0.0,
+                    "sampling_strategy": "closest_unsaled",
+                }]
+                sampled_b_images_docs.extend(b2)
         else:
             logging.warning("策略2 (closest_unsaled) 因无未售SPU而跳过。")
 
@@ -233,6 +239,9 @@ def process_a_image(
         
         for b_img in sampled_b_images_docs:
             b_image_spu_id = b_img["spu_id"]
+            if b_image_spu_id == -1:
+                logging.warning(f"策略采样结果无效，跳过该B图采样结果。")
+                continue
             b_image_path = load_b_img_path(b_image_spu_id, b_img_dir=Path(config.b_image_dataset_path) / category_name)
             if not b_image_path:
                 logging.warning(f"SPU {spu_id} 的A图 {a_image_id} 采样的B图 SPU: {b_image_spu_id} 主图 下载失败。")
@@ -252,6 +261,10 @@ def process_a_image(
     if a_image_progress.get("b_images") and not a_image_progress.get("prompts_generated"):
         logging.info(f"为A图 {a_image_id} 的B图生成Prompt...")
         for b_img in a_image_progress["b_images"]:
+            if b_img["b_image_spu_id"] == -1:
+                logging.warning(f"跳过无效的B图 SPU: {b_img['b_image_spu_id']} 的Prompt生成。")
+                b_img["prompt"] = ""
+                continue
             if not b_img.get("prompt"):
                 try:
                     b_img["prompt"] = generate_prompt(b_img["b_image_path"])
@@ -272,6 +285,10 @@ def process_a_image(
         for i, b_img_info in enumerate(a_image_progress["b_images"]):
             if b_img_info.get("c_image_path"):
                 continue # 如果这张C图已经生成，则跳过
+            if b_img_info["b_image_spu_id"] == -1:
+                logging.warning(f"跳过无效的B图 SPU: {b_img_info['b_image_spu_id']} 的C图生成。")
+                b_img_info["c_image_path"] = ""
+                continue
 
             c_image_dir = Path(config.c_image_dataset_path) / category_name / spu_id
             c_image_filename = f"{a_image_id}_{i}" # 为每张C图生成唯一文件名
