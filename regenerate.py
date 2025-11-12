@@ -67,8 +67,8 @@ def get_spu_list(metadata_dir: Path, specified_categories:Optional[List]=None) -
         logging.info(f"发现 {len(spu_by_category)} 个指定品类。")
         return spu_by_category
     else:
-        for metadata_file in metadata_dir.glob("images_metadata_*.json"):
-            category_name = metadata_file.stem.replace("images_metadata_", "")
+        for metadata_file in metadata_dir.glob("images_to_regenerate_*.json"):
+            category_name = metadata_file.stem.replace("images_to_regenerate_", "")
             with open(metadata_file, 'r', encoding='utf-8') as f:
                 images_id_dicts_list = json.load(f)
             spu_ids = [str(images_id_dict['spu_id']) for images_id_dict in images_id_dicts_list]
@@ -102,7 +102,7 @@ def process_spu(spu_id: str, category_name: str, config: Config, progress: Dict,
     # 下载该SPU的所有图片（如果尚未下载）
     if not spu_path.exists():
         logging.info(f"SPU目录不存在，开始下载SPU {spu_id} 的所需的A图...")
-        meta_json_path = Path(config.metadata_dir) / f"images_metadata_{category_name}.json"
+        meta_json_path = Path(config.metadata_dir) / f"images_to_regenerate_{category_name}.json"
         with open(meta_json_path, "r", encoding="utf-8") as f:
             images_id_dicts_list = json.load(f)
         spu_imgs_info = None
