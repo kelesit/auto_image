@@ -371,7 +371,7 @@ def main():
     try:
         for category, spu_list in spu_by_category.items():
             logging.info(f"===== 开始处理品类: {category} =====")
-            spu_list = spu_list[:5]  # 测试时只处理前10个SPU，正式运行时可移除该行
+            # spu_list = spu_list[:5]  # 测试时只处理前10个SPU，正式运行时可移除该行
             for spu_id in spu_list:
                 if not comfy_runner.is_server_running():
                     logging.error("检测到 ComfyUI 服务器连接中断。程序将终止。")

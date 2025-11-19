@@ -284,12 +284,12 @@ def process_a_image(
 
             c_image_dir = Path(config.c_image_dataset_path) / category_name / spu_id
             c_image_filename = f"{a_image_id}_{i}" # 为每张C图生成唯一文件名
-            text_prompt2 = f"remove the {category_name.split(' - ')[1]}, only keep the background"
+            # text_prompt2 = f"remove the {category_name.split(' - ')[1]}, only keep the background"
             c_image_path = runner.generate_image(
                 a_image_path=a_image_progress["a_image_path"],
-                b_image_path=b_img_info["b_image_path"],
+                # b_image_path=b_img_info["b_image_path"],
                 prompt_text=b_img_info["prompt"],
-                prompt_text2=text_prompt2,
+                # prompt_text2=text_prompt2,
                 output_dir=c_image_dir,
                 output_filename=c_image_filename
             )
@@ -350,6 +350,13 @@ def main():
     if not comfy_runner.is_server_running():
         logging.error("ComfyUI 服务器未运行。请先启动 ComfyUI。程序即将退出。")
         return # 直接退出
+    
+    try:
+        comfy_runner.connect()
+    except Exception as e:
+        logging.error(f"无法建立 WebSocket 连接: {e}")
+        return
+
     logging.info("ComfyUI运行器初始化完成，服务器在线。")
 
     progress_data = load_progress(progress_file)
@@ -390,6 +397,9 @@ def main():
         # 捕获其他意外错误
         logging.error(f"处理过程中发生意外错误: {e}", exc_info=True)
     finally:
+        if comfy_runner:
+            comfy_runner.close()
+
         # 确保无论程序是正常结束还是因错误中断，都会保存B图使用次数
         logging.info("正在保存B图使用次数...")
         b_img_sampler.save_usage_counts()
