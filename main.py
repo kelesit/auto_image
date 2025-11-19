@@ -295,9 +295,9 @@ def process_a_image(
             text_prompt2 = f"remove the {category_name.split(' - ')[1]}, only keep the background"
             c_image_path = runner.generate_image(
                 a_image_path=a_image_progress["a_image_path"],
-                b_image_path=b_img_info["b_image_path"],
+                # b_image_path=b_img_info["b_image_path"],
                 prompt_text=b_img_info["prompt"],
-                prompt_text2=text_prompt2,
+                # prompt_text2=text_prompt2,
                 output_dir=c_image_dir,
                 output_filename=c_image_filename
             )
@@ -355,25 +355,23 @@ def main():
     if not comfy_runner.is_server_running():
         logging.error("ComfyUI 服务器未运行。请先启动 ComfyUI。程序即将退出。")
         return # 直接退出
+    
+    try:
+        comfy_runner.connect()
+    except Exception as e:
+        logging.error(f"无法建立 WebSocket 连接: {e}")
+        return
+
     logging.info("ComfyUI运行器初始化完成，服务器在线。")
 
     progress_data = load_progress(progress_file)
     
     spu_by_category = get_spu_list(Path(cfg.metadata_dir), cfg.specified_categories)
 
-    # reduction_ratio = 3.0 / 7.0
-    # total_spu_count = sum(len(spu_list) for spu_list in spu_by_category.values())
-    # logging.info(f"当前总SPU数为 {total_spu_count}，超过3000，按比例缩减至3000。缩减比例: {reduction_ratio:.4f}")
-    # for category in spu_by_category:
-    #     original_count = len(spu_by_category[category])
-    #     new_count = max(1, int(original_count * reduction_ratio))  # 确保至少保留1个SPU
-    #     spu_by_category[category] = spu_by_category[category][:new_count]
-    #     logging.info(f"品类 {category} 从 {original_count} 个SPU 缩减到 {new_count} 个SPU。")
-
     try:
         for category, spu_list in spu_by_category.items():
             logging.info(f"===== 开始处理品类: {category} =====")
-            # spu_list = spu_list[:5]  # 测试时只处理前10个SPU，正式运行时可移除该行
+            spu_list = spu_list[:5]  # 测试时只处理前10个SPU，正式运行时可移除该行
             for spu_id in spu_list:
                 if not comfy_runner.is_server_running():
                     logging.error("检测到 ComfyUI 服务器连接中断。程序将终止。")
@@ -404,6 +402,9 @@ def main():
         # 捕获其他意外错误
         logging.error(f"处理过程中发生意外错误: {e}", exc_info=True)
     finally:
+        if comfy_runner:
+            comfy_runner.close()
+
         # 确保无论程序是正常结束还是因错误中断，都会保存B图使用次数
         logging.info("正在保存B图使用次数...")
         b_img_sampler.save_usage_counts()

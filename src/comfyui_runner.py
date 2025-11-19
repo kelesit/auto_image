@@ -1,4 +1,4 @@
-import websocket
+from websocket import WebSocket
 import uuid
 import json
 import urllib.request
@@ -24,9 +24,14 @@ class ComfyUIRunner:
             output_node_id (str): 最终生成图片的节点的ID
         """
         self.server_address = server_address
-        self.base_url = f"http://{self.server_address}"
+        # 规范化服务器地址，去掉末尾斜杠
+        if not self.server_address.startswith("https") and not self.server_address.startswith("http"):
+            self.base_url = f"http://{self.server_address.rstrip('/')}"
+        else:
+            self.base_url = self.server_address.rstrip("/")
         self.client_id = str(uuid.uuid4())
         self.node_mapping = node_mapping
+        self.ws = None
         
         try:
             with open(workflow_path, 'r', encoding='utf-8') as f:
@@ -35,6 +40,38 @@ class ComfyUIRunner:
         except Exception as e:
             logger.error(f"加载工作流文件失败: {workflow_path}, 错误: {e}")
             self.base_workflow = None
+
+    def connect(self):
+        """建立 WebSocket 长连接"""
+        if self.ws and self.ws.connected:
+            return
+
+        try:
+            self.ws = WebSocket()
+            # 根据服务器地址自动判断使用 ws 还是 wss
+            ws_protocol = "wss" if self.server_address.startswith("https") else "ws"
+            # 正确处理服务器地址：去掉协议前缀和末尾斜杠
+            ws_address = self.server_address.replace("https://", "").replace("http://", "").rstrip("/")
+            ws_url = f"{ws_protocol}://{ws_address}/ws?clientId={self.client_id}"
+            
+            logger.info(f"正在连接到 WebSocket: {ws_url}")
+            self.ws.connect(ws_url)
+            logger.info("WebSocket 连接成功建立")
+        except Exception as e:
+            logger.error(f"WebSocket 连接失败: {e}")
+            self.ws = None
+            raise
+
+    def close(self):
+        """关闭 WebSocket 连接"""
+        if self.ws:
+            try:
+                self.ws.close()
+                logger.info("WebSocket 连接已关闭")
+            except Exception as e:
+                logger.error(f"关闭 WebSocket 时出错: {e}")
+            finally:
+                self.ws = None
 
     def is_server_running(self, timeout: int = 5) -> bool:
         """检查ComfyUI服务器是否正在运行。"""
@@ -96,7 +133,7 @@ class ComfyUIRunner:
         with urllib.request.urlopen(f"{self.base_url}/history/{prompt_id}") as response:
             return json.loads(response.read())
 
-    def _get_generated_images(self, ws: websocket.WebSocket, prompt_id: str) -> dict:
+    def _get_generated_images(self, ws: WebSocket, prompt_id: str) -> dict:
         while True:
             out = ws.recv()
             if isinstance(out, str):
@@ -118,50 +155,70 @@ class ComfyUIRunner:
                 output_images[node_id] = images_output
         return output_images
 
-    def generate_image(self, a_image_path: str, b_image_path: str, prompt_text: str, prompt_text2:str, output_dir: Path, output_filename: str) -> str | None:
+    def generate_image(self, a_image_path: str, prompt_text: str, output_dir: Path, output_filename: str) -> str | None:
         """
-        生成单张C图。
+        根据工作流生成单张C图。
+        此版本已根据 '换图老子.json' 简化，只接受一张A图和一个提示词。
         """
         if not self.base_workflow:
             logger.error("工作流未加载，无法生成图片。")
             return None
 
-        # 1. 上传图片
+        if not self.ws or not self.ws.connected:
+            try:
+                self.connect()
+            except Exception:
+                return None
+            
+        # 1. 上传A图
         a_image_filename = self.upload_image(a_image_path)
-        b_image_filename = self.upload_image(b_image_path)
-        if not a_image_filename or not b_image_filename:
-            logger.error("图片上传失败，中断生成流程。")
+        if not a_image_filename:
+            logger.error("A图上传失败，中断生成流程。")
             return None
 
         # 2. 准备工作流
         prompt_workflow = json.loads(json.dumps(self.base_workflow))
-        a_node = self.node_mapping.get("a_image_node")
-        b_node = self.node_mapping.get("b_image_node")
-        prompt_node = self.node_mapping.get("prompt_node")
-        prompt_node2 = self.node_mapping.get("prompt_node2")
-        output_node = self.node_mapping.get("output_node")
+        a_node_id = self.node_mapping.get("a_image_node")
+        prompt_node_id = self.node_mapping.get("prompt_node")
+        output_node_id = self.node_mapping.get("output_node")
 
-        if not all([a_node, b_node, prompt_node]):
-            logger.error("节点映射不完整，请检查配置。")
+        if not all([a_node_id, prompt_node_id, output_node_id]):
+            logger.error("节点映射不完整 (a_image_node, prompt_node, output_node)，请检查配置。")
             return None
 
-        prompt_workflow[a_node]["inputs"]["image"] = a_image_filename
-        prompt_workflow[b_node]["inputs"]["image"] = b_image_filename
-        prompt_workflow[prompt_node]["inputs"]["text"] = prompt_text
-        prompt_workflow[prompt_node2]["inputs"]["text"] = prompt_text2
+        # 检查节点是否存在于工作流中
+        if a_node_id not in prompt_workflow or prompt_node_id not in prompt_workflow:
+            logger.error(f"节点ID {a_node_id} 或 {prompt_node_id} 不在工作流中，请检查 '换图老子.json' 和 NODE_MAPPING。")
+            return None
+
+        prompt_workflow[a_node_id]["inputs"]["image"] = a_image_filename
+        prompt_workflow[prompt_node_id]["inputs"]["text"] = prompt_text
         
         # 3. 执行并获取图片
-        ws = websocket.WebSocket()
+        # ws = WebSocket()
         try:
-            ws.connect(f"ws://{self.server_address}/ws?clientId={self.client_id}")
+            # # 根据服务器地址自动判断使用 ws 还是 wss
+            # ws_protocol = "wss" if self.server_address.startswith("https") else "ws"
+            # # 正确处理服务器地址：去掉协议前缀和末尾斜杠
+            # ws_address = self.server_address.replace("https://", "").replace("http://", "").rstrip("/")
+            # ws_url = f"{ws_protocol}://{ws_address}/ws?clientId={self.client_id}"
+            
+            # logger.info(f"正在连接到 WebSocket: {ws_url}")
+            # ws.connect(ws_url)
+            
             prompt_id = str(uuid.uuid4())
             self._queue_prompt(prompt_workflow, prompt_id)
-            images = self._get_generated_images(ws, prompt_id)
+            images = self._get_generated_images(self.ws, prompt_id)
         except Exception as e:
             logger.error(f"与ComfyUI通信时出错: {e}")
+            try:
+                self.close()
+                self.connect()
+            except:
+                pass
             return None
-        finally:
-            ws.close()
+        # finally:
+        #     ws.close()
 
         if not images:
             logger.warning("ComfyUI未返回任何图片。")
@@ -169,7 +226,7 @@ class ComfyUIRunner:
 
         # 4. 保存图片
         output_dir.mkdir(parents=True, exist_ok=True)
-        image_list = images.get(output_node)
+        image_list = images.get(output_node_id)
 
         if image_list:
             try:
@@ -182,7 +239,7 @@ class ComfyUIRunner:
             except Exception as e:
                 logger.error(f"保存图片时出错: {e}")
         else:
-            logger.error(f"在指定的输出节点 '{output_node}' 中未找到图片。")
+            logger.error(f"在指定的输出节点 '{output_node_id}' 中未找到图片。")
             logger.warning(f"可用的输出节点: {list(images.keys())}")
 
         return None
@@ -192,15 +249,13 @@ if __name__ == '__main__':
     # 配置日志记录器
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    # 1. 定义配置
-    SERVER_ADDRESS = "127.0.0.1:8188"
-    WORKFLOW_PATH = "/root/auto_image/换图小子.json"
+    # 1. 定义配置 (根据 '换图老子.json' 更新)
+    SERVER_ADDRESS = "https://u145974--7633a383cb7a.westd.seetacloud.com:8443/"
+    WORKFLOW_PATH = r"D:\work\auto_image\换图老子.json"
     NODE_MAPPING = {
-        "a_image_node": "191",
-        "b_image_node": "192",
-        "prompt_node": "6",
-        "prompt_node2": "198",  # 如果有第二个文本节点，可以取消注释并设置
-        "output_node": "136" # 这是最终生成图像的节点ID, 例如 KSampler
+        "a_image_node": "78",      # 加载图像节点
+        "prompt_node": "111",     # 文本提示节点
+        "output_node": "60"       # 保存图像节点
     }
     
     # 2. 初始化运行器
@@ -213,23 +268,20 @@ if __name__ == '__main__':
     # 3. 检查服务器状态并执行任务
     if runner.is_server_running():
         logger.info("服务器在线，准备开始生成任务。")
-        category = "82 - Accent Chairs"
-        category_name = category.split(" - ")[1]
-        a_img_path = "/root/auto_image/src/2450010529.jpg"
-        b_img_path = "/root/auto_image/src/2430449463.jpg"
-        text_prompt = "change the background to a cozy living room with light beige carpeting, wooden blinds casting striped shadows on the wall, sheer off-white curtains with scalloped trim, and a textured wood-paneled accent wall, illuminated by warm natural daylight."
-        text_prompt2 = f"remove the {category_name}, only keep the background"
+        
+        # 定义输入
+        a_img_path = r"D:\work\auto_image\2449912965.png" # 请使用您本地的图片路径
+        text_prompt = "change the background to a modern living room with light grey carpet, white walls, a beige sofa, and soft natural daylight coming through sheer curtains."
         output_directory = Path("./output_images")
         output_file = "test_generation_01"
 
-        if not os.path.exists(a_img_path) or not os.path.exists(b_img_path):
-            logger.error(f"请确保输入图片存在: {a_img_path}, {b_img_path}")
+        # 检查输入图片是否存在
+        if not os.path.exists(a_img_path):
+            logger.error(f"请确保输入图片存在: {a_img_path}")
         else:
             generated_path = runner.generate_image(
                 a_image_path=a_img_path,
-                b_image_path=b_img_path,
                 prompt_text=text_prompt,
-                prompt_text2=text_prompt2,
                 output_dir=output_directory,
                 output_filename=output_file
             )
@@ -240,4 +292,4 @@ if __name__ == '__main__':
 
     else:
         logger.error("服务器不在线，请先启动ComfyUI服务器。")
-        logger.info("启动命令示例: cd /root/autodl-tmp/ComfyUI && python main.py --listen")
+        logger.info("启动命令示例: cd /root/autodl-tmp/ComfyUI && comfy launch")
